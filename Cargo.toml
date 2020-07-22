@@ -1,0 +1,11 @@
+[package]
+name = "nucleo144-rs"
+version = "0.1.0"
+authors = ["Ben Brown <bbrown1867@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+cortex-m = "0.6.0"
+cortex-m-rt = "0.6.10"
+panic-halt = "0.2.0"
+stm32f7xx-hal = { version = "0.2.0", features = ["stm32f767"] }
