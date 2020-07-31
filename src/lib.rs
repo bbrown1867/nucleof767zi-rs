@@ -1,10 +1,57 @@
 #![no_std]
 
+use stm32f7xx_hal::device::USART3;
 use stm32f7xx_hal::gpio::gpiob::{self, PB};
+use stm32f7xx_hal::gpio::gpiod;
 use stm32f7xx_hal::gpio::{Output, PushPull};
+use stm32f7xx_hal::rcc::Clocks;
+use stm32f7xx_hal::serial::{self, Pins, Serial};
 
+use core::fmt::Write;
 use embedded_hal::digital::v2::InputPin;
 use embedded_hal::digital::v2::OutputPin;
+
+// Serial
+
+macro_rules! uprint {
+    ($serial:expr, $($arg:tt)*) => {
+        $serial.write_fmt(format_args!($($arg)*)).ok()
+    };
+}
+
+macro_rules! uprintln {
+    ($serial:expr, $fmt:expr) => {
+        uprint!($serial, concat!($fmt, "\n"))
+    };
+    ($serial:expr, $fmt:expr, $($arg:tt)*) => {
+        uprint!($serial, concat!($fmt, "\n"), $($arg)*)
+    };
+}
+
+struct StLinkSerial {
+    sp: Serial<USART3, Pins<USART3>>,
+}
+
+impl StLinkSerial {
+    pub fn new(gpiod: gpiod::Parts, usart: USART3, clocks: Clocks) -> Self {
+        let tx_pin = gpiod.pd8.into_alternate_af7();
+        let rx_pin = gpiod.pd9.into_alternate_af7();
+
+        let sp = Serial::new(usart, (tx_pin, rx_pin), clocks, serial::Config::default());
+
+        StLinkSerial { sp }
+    }
+}
+
+impl core::fmt::Write for StLinkSerial {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        let (tx, _) = self.sp.split();
+        tx.write_str(s);
+        Ok(())
+    }
+}
+
+// LED
 
 pub const LED1: usize = 0;
 pub const LED2: usize = 1;
@@ -23,11 +70,11 @@ impl Led {
         self.pin.set_low().ok();
     }
 
-    pub fn on(&mut self) {
+    pub fn on(&mut self) -> () {
         self.pin.set_high().ok();
     }
 
-    pub fn toggle(&mut self) {
+    pub fn toggle(&mut self) -> () {
         if let Ok(true) = self.pin.is_low() {
             self.pin.set_high().ok();
         } else {

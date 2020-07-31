@@ -11,5 +11,6 @@ embedded-hal = "0.2.3"
 stm32f7xx-hal = { version = "0.2.0", features = ["rt", "stm32f767"] }
 
 [dev-dependencies]
+panic-halt = "0.2.0"
 panic-semihosting = "0.5.2"
 cortex-m-semihosting = "0.3.3"
