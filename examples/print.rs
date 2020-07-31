@@ -22,8 +22,10 @@ fn main() -> ! {
     let gpiod = pac_periph.GPIOD.split();
     let mut stlink_serial = StLinkSerial::new(gpiod, usart3, clocks);
 
+    let mut counter = 0;
     loop {
-        uprintln!(stlink_serial, "Hello World!\r\n");
+        uprintln!(stlink_serial, "Hello World! ({})\r\n", counter);
         delay.delay_ms(500_u16);
+        counter = counter + 1;
     }
 }

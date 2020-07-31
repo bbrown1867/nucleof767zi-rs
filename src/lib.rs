@@ -1,14 +1,12 @@
 #![no_std]
 
 use stm32f7xx_hal::device::USART3;
-use stm32f7xx_hal::gpio::{Alternate, AF7};
 use stm32f7xx_hal::gpio::gpiob::{self, PB};
-use stm32f7xx_hal::gpio::gpiod::{self, PD8, PD9};
+use stm32f7xx_hal::gpio::gpiod;
 use stm32f7xx_hal::gpio::{Output, PushPull};
 use stm32f7xx_hal::rcc::Clocks;
-use stm32f7xx_hal::serial::{self, Serial, Tx, Rx};
+use stm32f7xx_hal::serial::{self, Serial, Tx};
 
-use core::fmt::Write;
 use embedded_hal::digital::v2::InputPin;
 use embedded_hal::digital::v2::OutputPin;
 
@@ -32,9 +30,7 @@ macro_rules! uprintln {
 }
 
 pub struct StLinkSerial {
-    //sp: Serial<USART3, (PD8<Alternate<AF7>>, PD9<Alternate<AF7>>)>,
     tx: Tx<USART3>,
-    rx: Rx<USART3>
 }
 
 impl StLinkSerial {
@@ -44,16 +40,15 @@ impl StLinkSerial {
 
         let sp = Serial::new(usart, (tx_pin, rx_pin), clocks, serial::Config::default());
 
-        let (tx, rx) = sp.split();
+        let (tx, _) = sp.split();
 
-        StLinkSerial { tx, rx }
+        StLinkSerial { tx }
     }
 }
 
 impl core::fmt::Write for StLinkSerial {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        self.tx.write_str(s);
-        Ok(())
+        self.tx.write_str(s)
     }
 }
 
