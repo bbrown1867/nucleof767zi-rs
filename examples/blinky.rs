@@ -1,7 +1,7 @@
 #![no_main]
 #![no_std]
 
-extern crate panic_semihosting;
+extern crate panic_halt;
 
 use cortex_m_rt::entry;
 use cortex_m_semihosting::hprintln;
