@@ -5,7 +5,7 @@ extern crate panic_halt;
 
 use cortex_m_rt::entry;
 use cortex_m_semihosting::hprintln;
-use nucleo144_rs::{Leds, LED1, LED2, LED3};
+use nucleof767zi_rs::{Leds, LED1, LED2, LED3};
 use stm32f7xx_hal::{delay::Delay, device, prelude::*};
 
 #[entry]

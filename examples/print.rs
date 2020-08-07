@@ -4,7 +4,7 @@
 extern crate panic_halt;
 
 use cortex_m_rt::entry;
-use nucleo144_rs::{uprint, uprintln, StLinkSerial};
+use nucleof767zi_rs::{uprint, uprintln, StLinkSerial};
 use stm32f7xx_hal::{delay::Delay, device, prelude::*};
 
 use core::fmt::Write;
