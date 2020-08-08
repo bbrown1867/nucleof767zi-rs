@@ -9,10 +9,21 @@ use nucleof767zi_rs::Led;
 use stm32f7xx_hal::gpio::{Edge, ExtiPin};
 use stm32f7xx_hal::{device, interrupt, prelude::*};
 
+const SYSCFG_EN: u32 = 14;
+
 #[entry]
 fn main() -> ! {
     let pac_periph = device::Peripherals::take().unwrap();
+
     let rcc = pac_periph.RCC.constrain();
+
+    // TODO: This took a long time to figure out, is there a way to bake this into GPIO/EXTI?
+    unsafe {
+        &(*device::RCC::ptr())
+            .apb2enr
+            .modify(|r, w| w.bits(r.bits() | (1 << SYSCFG_EN)));
+    }
+
     rcc.cfgr.sysclk(216.mhz()).freeze();
 
     // Push button configuration
@@ -26,17 +37,6 @@ fn main() -> ! {
     unsafe {
         NVIC::unmask::<interrupt>(interrupt::EXTI15_10);
     }
-
-    // Problem appears to be that exticr4 never gets set properly, and we trigger on PA13 instead
-
-    // syscfg.exticr4.modify(|_, w| unsafe {
-    //     w.bits(0x20)
-    // });
-    // let _test = syscfg.exticr4.read().bits();
-
-    // let REG_TEST: *mut u32 = 0x40013814 as *mut u32;
-    // *REG_TEST = 0x20;
-    // let _test = *REG_TEST;
 
     loop {}
 }
