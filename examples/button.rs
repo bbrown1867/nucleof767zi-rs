@@ -6,12 +6,8 @@ extern crate panic_halt;
 use cortex_m::peripheral::NVIC;
 use cortex_m_rt::entry;
 use nucleof767zi_rs::Led;
-use stm32f7xx_hal::gpio::gpioc::PC13;
-use stm32f7xx_hal::gpio::{Edge, ExtiPin, Floating, Input};
+use stm32f7xx_hal::gpio::{Edge, ExtiPin};
 use stm32f7xx_hal::{device, interrupt, prelude::*};
-
-static mut BUTTON: Option<PC13<Input<Floating>>> = None;
-static mut LED: Option<Led> = None;
 
 #[entry]
 fn main() -> ! {
@@ -19,54 +15,54 @@ fn main() -> ! {
     let rcc = pac_periph.RCC.constrain();
     rcc.cfgr.sysclk(216.mhz()).freeze();
 
-    // Push button
+    // Push button configuration
     let mut syscfg = pac_periph.SYSCFG;
     let mut exti = pac_periph.EXTI;
     let gpioc = pac_periph.GPIOC.split();
+    let mut button = gpioc.pc13.into_floating_input();
+    button.make_interrupt_source(&mut syscfg);
+    button.trigger_on_edge(&mut exti, Edge::RISING);
+    button.enable_interrupt(&mut exti);
     unsafe {
-        BUTTON = Some(gpioc.pc13.into_floating_input());
-
-        match &mut BUTTON {
-            Some(button) => {
-                button.make_interrupt_source(&mut syscfg);
-
-                // syscfg.exticr4.modify(|r, w|
-                //     w.bits((r.bits() & !(0xf << 8)) | (0x2 << 8))
-                // );
-
-                button.trigger_on_edge(&mut exti, Edge::RISING);
-                button.enable_interrupt(&mut exti);
-                NVIC::unmask::<interrupt>(interrupt::EXTI15_10);
-            }
-            None => panic!("Error initializing button.\r\n"),
-        }
+        NVIC::unmask::<interrupt>(interrupt::EXTI15_10);
     }
 
-    // Debug LED
-    let gpiob = pac_periph.GPIOB.split();
-    unsafe {
-        LED = Some(Led::new(gpiob.pb0.into_push_pull_output().downgrade()));
+    // Problem appears to be that exticr4 never gets set properly, and we trigger on PA13 instead
 
-        match &mut LED {
-            Some(led) => led.on(),
-            None => panic!("Error initializing LED.\r\n"),
-        };
-    }
+    // syscfg.exticr4.modify(|_, w| unsafe {
+    //     w.bits(0x20)
+    // });
+    // let _test = syscfg.exticr4.read().bits();
+
+    // let REG_TEST: *mut u32 = 0x40013814 as *mut u32;
+    // *REG_TEST = 0x20;
+    // let _test = *REG_TEST;
 
     loop {}
 }
 
 #[interrupt]
 fn EXTI15_10() {
-    unsafe {
-        match &mut BUTTON {
-            Some(button) => button.clear_interrupt_pending_bit(),
-            None => panic!("Error initializing button.\r\n"),
-        };
+    static mut COUNT: u32 = 0;
 
-        match &mut LED {
-            Some(led) => led.toggle(),
-            None => panic!("Error initializing LED.\r\n"),
-        };
+    unsafe {
+        // TODO: Is there a safe alternative? Using a mutable static GPIO pin is also unsafe
+        let pac_periph = device::Peripherals::steal();
+
+        // Clear the push button interrupt
+        let gpioc = pac_periph.GPIOC.split();
+        let mut button = gpioc.pc13.into_floating_input();
+        button.clear_interrupt_pending_bit();
+
+        // Blink an LED for debug purposes
+        let gpiob = pac_periph.GPIOB.split();
+        let mut led1 = Led::new(gpiob.pb0.into_push_pull_output().downgrade());
+        if *COUNT & 0x1 == 0x01 {
+            led1.on();
+        } else {
+            led1.off();
+        }
     }
+
+    *COUNT += 1;
 }
