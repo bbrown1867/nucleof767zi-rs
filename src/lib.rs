@@ -1,14 +1,89 @@
 #![no_std]
 
-use stm32f7xx_hal::device::USART3;
-use stm32f7xx_hal::gpio::gpiob::{self, PB};
-use stm32f7xx_hal::gpio::gpiod;
-use stm32f7xx_hal::gpio::{Output, PushPull};
+use cortex_m::peripheral::NVIC;
+
+use stm32f7xx_hal::device::{self, EXTI, SYSCFG, USART3};
+use stm32f7xx_hal::gpio::gpiob::PB;
+use stm32f7xx_hal::gpio::gpioc::PC13;
+use stm32f7xx_hal::gpio::{gpiob, gpioc, gpiod, Edge, ExtiPin, Floating, Input, Output, PushPull};
+use stm32f7xx_hal::interrupt;
 use stm32f7xx_hal::rcc::Clocks;
 use stm32f7xx_hal::serial::{self, Serial, Tx};
 
 use embedded_hal::digital::v2::InputPin;
 use embedded_hal::digital::v2::OutputPin;
+
+// Push Button
+
+static mut USER_BUTTON: Option<UserButton> = None;
+
+pub struct UserButton {
+    callback: fn(&mut UserButton),
+    pin: PC13<Input<Floating>>,
+    // It may be useful for the user to know the counter in the callback
+    pub isr_count: u32,
+    // LED1 will be initialized in setup to use in the callback
+    pub debug_led: Led,
+}
+
+impl UserButton {
+    pub fn setup(
+        callback: fn(&mut UserButton),
+        gpiob: gpiob::Parts,
+        gpioc: gpioc::Parts,
+        syscfg: &mut SYSCFG,
+        exti: &mut EXTI,
+    ) {
+        // TODO: Bug in HAL
+        const SYSCFG_EN: u32 = 14;
+        unsafe {
+            &(*device::RCC::ptr())
+                .apb2enr
+                .modify(|r, w| w.bits(r.bits() | (1 << SYSCFG_EN)));
+        }
+
+        // Debug LED configuration
+        let led1_pin = gpiob.pb0.into_push_pull_output().downgrade();
+        let led1 = Led::new(led1_pin);
+
+        // Push button configuration;
+        let mut button_pin = gpioc.pc13.into_floating_input();
+        button_pin.make_interrupt_source(syscfg);
+        button_pin.trigger_on_edge(exti, Edge::RISING);
+        button_pin.enable_interrupt(exti);
+        unsafe {
+            NVIC::unmask::<interrupt>(interrupt::EXTI15_10);
+        }
+
+        // Save the global state, such that ISR can work
+        unsafe {
+            USER_BUTTON = Some(UserButton {
+                callback,
+                pin: button_pin,
+                isr_count: 0,
+                debug_led: led1,
+            });
+        }
+    }
+}
+
+#[interrupt]
+fn EXTI15_10() {
+    unsafe {
+        match &mut USER_BUTTON {
+            Some(button) => {
+                // Clear the push button interrupt
+                button.pin.clear_interrupt_pending_bit();
+
+                // Call the callback
+                (button.callback)(button);
+
+                button.isr_count += 1;
+            }
+            None => (),
+        }
+    }
+}
 
 // Serial
 
