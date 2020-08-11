@@ -63,7 +63,8 @@ impl UserButton {
 #[interrupt]
 fn EXTI15_10() {
     free(|cs| {
-        match &mut USER_BUTTON.borrow(cs).borrow_mut().take() {
+        let mut button = USER_BUTTON.borrow(cs).borrow_mut().take();
+        match &mut button {
             Some(button) => {
                 // Clear the push button interrupt
                 button.pin.clear_interrupt_pending_bit();
@@ -73,6 +74,8 @@ fn EXTI15_10() {
             }
             None => (),
         }
+
+        USER_BUTTON.borrow(cs).replace(button)
     });
 }
 
