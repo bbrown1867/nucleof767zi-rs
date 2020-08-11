@@ -4,7 +4,7 @@
 extern crate panic_halt;
 
 use core::cell::Cell;
-use cortex_m::interrupt::{free, Mutex};
+use cortex_m::interrupt::{free, CriticalSection, Mutex};
 use cortex_m_rt::entry;
 use nucleof767zi_rs::{Led, UserButton};
 use stm32f7xx_hal::{device, prelude::*};
@@ -43,7 +43,8 @@ fn main() -> ! {
     }
 }
 
-fn button_cb() {
+// Callback function, executed in a critical section
+fn button_cb(cs: &CriticalSection) {
     // Signal that interrupt fired
-    free(|cs| SEMAPHORE.borrow(cs).set(false));
+    SEMAPHORE.borrow(cs).set(false);
 }

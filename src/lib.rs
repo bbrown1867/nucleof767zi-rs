@@ -1,5 +1,8 @@
 #![no_std]
 
+use core::cell::RefCell;
+
+use cortex_m::interrupt::{free, CriticalSection, Mutex};
 use cortex_m::peripheral::NVIC;
 
 use stm32f7xx_hal::device::{self, EXTI, SYSCFG, USART3};
@@ -15,15 +18,20 @@ use embedded_hal::digital::v2::OutputPin;
 
 // Push Button
 
-static mut USER_BUTTON: Option<UserButton> = None;
+static USER_BUTTON: Mutex<RefCell<Option<UserButton>>> = Mutex::new(RefCell::new(None));
 
 pub struct UserButton {
-    callback: fn(),
+    callback: fn(cs: &CriticalSection),
     pin: PC13<Input<Floating>>,
 }
 
 impl UserButton {
-    pub fn setup(callback: fn(), gpioc: gpioc::Parts, syscfg: &mut SYSCFG, exti: &mut EXTI) {
+    pub fn setup(
+        callback: fn(cs: &CriticalSection),
+        gpioc: gpioc::Parts,
+        syscfg: &mut SYSCFG,
+        exti: &mut EXTI,
+    ) {
         // TODO: Bug in HAL
         const SYSCFG_EN: u32 = 14;
         unsafe {
@@ -38,11 +46,15 @@ impl UserButton {
         pin.trigger_on_edge(exti, Edge::RISING);
         pin.enable_interrupt(exti);
 
-        unsafe {
-            // Save the global state, critical section not needed since interrupt not enabled yet
-            USER_BUTTON = Some(UserButton { callback, pin });
+        // Save information needed by the interrupt handler to the global variable
+        free(|cs| {
+            USER_BUTTON
+                .borrow(cs)
+                .replace(Some(UserButton { callback, pin }));
+        });
 
-            // Enable the button interrupt
+        // Enable the button interrupt
+        unsafe {
             NVIC::unmask::<interrupt>(interrupt::EXTI15_10);
         }
     }
@@ -50,18 +62,18 @@ impl UserButton {
 
 #[interrupt]
 fn EXTI15_10() {
-    unsafe {
-        match &mut USER_BUTTON {
+    free(|cs| {
+        match &mut USER_BUTTON.borrow(cs).borrow_mut().take() {
             Some(button) => {
                 // Clear the push button interrupt
                 button.pin.clear_interrupt_pending_bit();
 
                 // Call the callback
-                (button.callback)();
+                (button.callback)(cs);
             }
             None => (),
         }
-    }
+    });
 }
 
 // Serial
