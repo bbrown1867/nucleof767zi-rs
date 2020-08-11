@@ -18,22 +18,12 @@ use embedded_hal::digital::v2::OutputPin;
 static mut USER_BUTTON: Option<UserButton> = None;
 
 pub struct UserButton {
-    callback: fn(&mut UserButton),
+    callback: fn(),
     pin: PC13<Input<Floating>>,
-    // It may be useful for the user to know the counter in the callback
-    pub isr_count: u32,
-    // LED1 will be initialized in setup to use in the callback
-    pub debug_led: Led,
 }
 
 impl UserButton {
-    pub fn setup(
-        callback: fn(&mut UserButton),
-        gpiob: gpiob::Parts,
-        gpioc: gpioc::Parts,
-        syscfg: &mut SYSCFG,
-        exti: &mut EXTI,
-    ) {
+    pub fn setup(callback: fn(), gpioc: gpioc::Parts, syscfg: &mut SYSCFG, exti: &mut EXTI) {
         // TODO: Bug in HAL
         const SYSCFG_EN: u32 = 14;
         unsafe {
@@ -42,27 +32,18 @@ impl UserButton {
                 .modify(|r, w| w.bits(r.bits() | (1 << SYSCFG_EN)));
         }
 
-        // Debug LED configuration
-        let led1_pin = gpiob.pb0.into_push_pull_output().downgrade();
-        let led1 = Led::new(led1_pin);
+        // Push button configuration
+        let mut pin = gpioc.pc13.into_floating_input();
+        pin.make_interrupt_source(syscfg);
+        pin.trigger_on_edge(exti, Edge::RISING);
+        pin.enable_interrupt(exti);
 
-        // Push button configuration;
-        let mut button_pin = gpioc.pc13.into_floating_input();
-        button_pin.make_interrupt_source(syscfg);
-        button_pin.trigger_on_edge(exti, Edge::RISING);
-        button_pin.enable_interrupt(exti);
         unsafe {
+            // Save the global state, critical section not needed since interrupt not enabled yet
+            USER_BUTTON = Some(UserButton { callback, pin });
+
+            // Enable the button interrupt
             NVIC::unmask::<interrupt>(interrupt::EXTI15_10);
-        }
-
-        // Save the global state, such that ISR can work
-        unsafe {
-            USER_BUTTON = Some(UserButton {
-                callback,
-                pin: button_pin,
-                isr_count: 0,
-                debug_led: led1,
-            });
         }
     }
 }
@@ -76,9 +57,7 @@ fn EXTI15_10() {
                 button.pin.clear_interrupt_pending_bit();
 
                 // Call the callback
-                (button.callback)(button);
-
-                button.isr_count += 1;
+                (button.callback)();
             }
             None => (),
         }
